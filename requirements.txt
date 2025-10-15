@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+beanie
+motor
+python-dotenv
+httpx
+pytest
+pytest-asyncio
