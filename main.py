@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 
 from models import User, Product
-from routers import users, products
+from routers import users, products, auth
 
 # Load environment variables
 load_dotenv()
@@ -29,3 +29,4 @@ async def startup_event():
 
 app.include_router(users.router)
 app.include_router(products.router)
+app.include_router(auth.router)

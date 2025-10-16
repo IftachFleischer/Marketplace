@@ -22,7 +22,6 @@ class User(Document):
     class Settings:
         name = "users"
 
-
 class Product(Document):
     product_name: str = Field(..., max_length=100)
     product_description: str = Field(..., max_length=1000)
