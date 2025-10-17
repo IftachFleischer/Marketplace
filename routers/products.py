@@ -1,12 +1,18 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from models import Product, ProductCreate, User
 from typing import List
+from routers.auth import get_current_user
 
 router = APIRouter(
     prefix="/products",
     tags=["products"]
 )
 
+
+@router.get("/")
+async def get_products(current_user=Depends(get_current_user)):
+    products = await Product.find_all().to_list()
+    return products
 
 @router.post("/", response_model=Product)
 async def create_product(product: ProductCreate):

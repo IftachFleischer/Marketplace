@@ -2,24 +2,31 @@
 from datetime import datetime, timedelta
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
-from jose import jwt
-
+from jose import jwt, JWTError
 from beanie import PydanticObjectId
-from models import User  # your Beanie Document
 
-# Config - read from env (fallback defaults for dev)
+from models import User  # Beanie Document
+
+# ==============================
+# CONFIG
+# ==============================
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+# ==============================
+# SCHEMAS
+# ==============================
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -30,37 +37,48 @@ class LoginRequest(BaseModel):
     password: str
 
 
+# ==============================
+# JWT HELPERS
+# ==============================
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     now = datetime.utcnow()
-    if expires_delta:
-        expire = now + expires_delta
-    else:
-        expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = now + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "iat": now})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+        user = await User.get(PydanticObjectId(user_id))
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        return user
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+
+
+# ==============================
+# ROUTES
+# ==============================
 @router.post("/login", response_model=Token)
 async def login(request: LoginRequest):
-    # get raw user document by email
     user = await User.find_one(User.email == request.email)
-    if not user:
-        # avoid leaking which field was wrong
+    if not user or not pwd_context.verify(request.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # verify password
-    if not pwd_context.verify(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    # payload - keep it minimal
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     token_payload = {
-        "sub": str(user.id),          # subject: user id
+        "sub": str(user.id),
         "email": user.email,
         "role": getattr(user, "role", "user"),
     }
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     token = create_access_token(token_payload, expires_delta=access_token_expires)
 
     return {"access_token": token, "token_type": "bearer"}
