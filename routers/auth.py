@@ -82,3 +82,11 @@ async def login(request: LoginRequest):
     token = create_access_token(token_payload, expires_delta=access_token_expires)
 
     return {"access_token": token, "token_type": "bearer"}
+
+
+@router.get("/me", response_model=User)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """
+    Return the currently authenticated user's data.
+    """
+    return current_user

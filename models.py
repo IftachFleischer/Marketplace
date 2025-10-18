@@ -53,13 +53,12 @@ class UserCreate(BaseModel):
 
 
 class ProductCreate(BaseModel):
-    product_name: str = Field(..., max_length=100)
-    product_description: str = Field(..., max_length=1000)
-    price_usd: int
-    seller_id: str
-    category: Optional[str] = Field(None, max_length=50)
-    brand: Optional[str] = Field(None, max_length=50)
-    images: Optional[List[str]] = Field(default_factory=list)
+    product_name: str
+    product_description: Optional[str] = None
+    price_usd: float
+    category: Optional[str] = None
+    brand: Optional[str] = None
+    images: Optional[list[str]] = []
 
 class UserResponse(BaseModel):
     id: str
