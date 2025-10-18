@@ -73,3 +73,13 @@ class UserResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+class Message(Document):
+    sender: Link["User"]
+    receiver: Link["User"]
+    content: str = Field(..., max_length=1000)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    is_read: bool = Field(default=False)
+
+    class Settings:
+        name = "messages"

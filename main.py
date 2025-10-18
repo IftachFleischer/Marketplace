@@ -4,15 +4,18 @@ from beanie import init_beanie
 import os
 from dotenv import load_dotenv
 
-from models import User, Product
-from routers import users, products, auth
+from models import User, Product, Message
+from routers import users, products, auth, messages
 
 # Load environment variables
 load_dotenv()
 
-app = FastAPI()
+# ✅ Create ONE FastAPI app instance
+app = FastAPI(title="Marketplace API")
 
-
+# ==============================
+# Database initialization
+# ==============================
 @app.on_event("startup")
 async def startup_event():
     mongo_uri = os.getenv("MONGO_URI")
@@ -21,12 +24,13 @@ async def startup_event():
 
     client = AsyncIOMotorClient(mongo_uri)
     db_name = "MarketplaceDB"
-    if not db_name:
-        db_name = "MarketplaceDB"
-    await init_beanie(database=client[db_name], document_models=[User, Product])
-    print(f"Connected to MongoDB database: {db_name}")
+    await init_beanie(database=client[db_name], document_models=[User, Product, Message])
+    print(f"✅ Connected to MongoDB database: {db_name}")
 
-
+# ==============================
+# Routers
+# ==============================
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(products.router)
-app.include_router(auth.router)
+app.include_router(messages.router)
