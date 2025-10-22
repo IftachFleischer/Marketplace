@@ -15,9 +15,18 @@ load_dotenv()
 # ✅ Create ONE FastAPI app instance
 app = FastAPI(title="Marketplace API")
 
+# ==============================
+# CORS middleware
+# ==============================
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    # add more frontend URLs if needed
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # or ["*"] for dev
+    allow_origins=origins,  # or ["*"] for dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
