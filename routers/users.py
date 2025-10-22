@@ -22,6 +22,7 @@ def truncate_password(password: str) -> str:
         password = encoded.decode("utf-8", "ignore")
     return password
 
+
 @router.post("/", response_model=User)
 async def create_user(user: UserCreate):
     # Check if user already exists

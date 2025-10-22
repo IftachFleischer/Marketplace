@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 import os
@@ -7,11 +8,20 @@ from dotenv import load_dotenv
 from models import User, Product, Message
 from routers import users, products, auth, messages
 
+
 # Load environment variables
 load_dotenv()
 
 # ✅ Create ONE FastAPI app instance
 app = FastAPI(title="Marketplace API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # or ["*"] for dev
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ==============================
 # Database initialization
@@ -34,3 +44,4 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(products.router)
 app.include_router(messages.router)
+

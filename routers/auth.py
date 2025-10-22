@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from beanie import PydanticObjectId
+from models import UserCreate
 
 from models import User  # Beanie Document
 
@@ -67,6 +68,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # ==============================
 # ROUTES
 # ==============================
+
 @router.post("/login", response_model=Token)
 async def login(request: LoginRequest):
     user = await User.find_one(User.email == request.email)
@@ -90,3 +92,25 @@ async def get_me(current_user: User = Depends(get_current_user)):
     Return the currently authenticated user's data.
     """
     return current_user
+
+
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+@router.post("/register", response_model=User)
+async def register_user(user: UserCreate):
+    existing_user = await User.find_one(User.email == user.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    hashed_pw = pwd_context.hash(user.password)
+    new_user = User(
+        first_name=user.first_name,
+        last_name=user.last_name,
+        email=user.email,
+        password_hash=hashed_pw,
+        phone_number=user.phone_number,
+        address=user.address,
+    )
+    await new_user.insert()
+    return new_user
