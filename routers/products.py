@@ -1,22 +1,71 @@
 # routers/products.py
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Depends, status
 from beanie import PydanticObjectId
+
 from models import Product, User, ProductCreate
 from routers.auth import get_current_user
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 
+# --- Helpers -----------------------------------------------------------------
+async def _extract_seller_id(product: Product) -> str | None:
+    """
+    Normalize the seller id across possible shapes:
+    - Beanie Link(User)  -> fetch() and read doc.id
+    - {"id": ObjectId}   -> str(value)
+    - {"$id": ...}       -> DBRef-like; supports {"$oid": "..."} as well
+    - "string_id"        -> as-is
+    Returns the seller id as a string, or None if it cannot be determined.
+    """
+    s = product.seller
+
+    # Link[User] (Beanie)
+    try:
+        if hasattr(s, "fetch"):
+            doc = await s.fetch()
+            return str(doc.id)
+    except Exception:
+        # If fetch fails, continue to other shapes
+        pass
+
+    # Dict-like shapes
+    if isinstance(s, dict):
+        if "id" in s:
+            return str(s["id"])
+        if "$id" in s:
+            sid = s["$id"]
+            # Could be {"$oid": "..."} or raw ObjectId/string
+            if isinstance(sid, dict) and "$oid" in sid:
+                return str(sid["$oid"])
+            return str(sid)
+
+    # Raw string id
+    if isinstance(s, str):
+        return s
+
+    # Fallback
+    return None
+
+
+# --- Routes ------------------------------------------------------------------
 # GET - Public route (no auth required)
 @router.get("/", response_model=list[Product])
 async def get_products():
     return await Product.find_all().to_list()
 
 
-# GET single product
+# GET single product - Public
 @router.get("/{product_id}", response_model=Product)
 async def get_product(product_id: str):
-    product = await Product.get(PydanticObjectId(product_id))
+    try:
+        oid = PydanticObjectId(product_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+    product = await Product.get(oid)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     return product
@@ -24,7 +73,10 @@ async def get_product(product_id: str):
 
 # CREATE - Protected
 @router.post("/", response_model=Product, status_code=status.HTTP_201_CREATED)
-async def create_product(product_data: ProductCreate, current_user: User = Depends(get_current_user)):
+async def create_product(
+    product_data: ProductCreate,
+    current_user: User = Depends(get_current_user),
+):
     product = Product(
         product_name=product_data.product_name,
         product_description=product_data.product_description,
@@ -32,7 +84,10 @@ async def create_product(product_data: ProductCreate, current_user: User = Depen
         category=product_data.category,
         brand=product_data.brand,
         images=product_data.images or [],
+        # Keep current storage style; _extract_seller_id handles it
         seller={"id": current_user.id, "collection": "users"},
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
     )
     await product.insert()
     return product
@@ -40,27 +95,113 @@ async def create_product(product_data: ProductCreate, current_user: User = Depen
 
 # UPDATE - Protected (only seller or admin)
 @router.put("/{product_id}", response_model=Product)
-async def update_product(product_id: str, update_data: dict, current_user: User = Depends(get_current_user)):
-    product = await Product.get(PydanticObjectId(product_id))
+async def update_product(
+    product_id: str,
+    update_data: dict,
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        oid = PydanticObjectId(product_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+    product = await Product.get(oid)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    if product.seller["id"] != current_user.id and current_user.role != "admin":
+    seller_id = await _extract_seller_id(product)
+    if str(seller_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    await product.set(update_data)
+    # Whitelist fields that can be updated via this endpoint
+    ALLOWED_FIELDS = {
+        "product_name",
+        "product_description",
+        "price_usd",
+        "category",
+        "brand",
+        "images",
+        "stock_quantity",
+        "is_sold",
+    }
+    safe_update = {k: v for k, v in update_data.items() if k in ALLOWED_FIELDS}
+    safe_update["updated_at"] = datetime.utcnow()
+
+    if not safe_update:
+        # Nothing to update; return current product
+        return product
+
+    await product.set(safe_update)
     return product
 
 
 # DELETE - Protected (only seller or admin)
 @router.delete("/{product_id}")
-async def delete_product(product_id: str, current_user: User = Depends(get_current_user)):
-    product = await Product.get(PydanticObjectId(product_id))
+async def delete_product(
+    product_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        oid = PydanticObjectId(product_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+    product = await Product.get(oid)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    if str(product.seller["id"]) != str(current_user.id) and current_user.role != "admin":
+    seller_id = await _extract_seller_id(product)
+    if str(seller_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
     await product.delete()
     return {"detail": "Product deleted"}
+
+@router.patch("/{product_id}/mark_sold", response_model=Product)
+async def mark_product_sold(
+    product_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        oid = PydanticObjectId(product_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+    product = await Product.get(oid)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # reuse the existing helper you already have in this file
+    async def _extract_seller_id(product: Product) -> str | None:
+        s = product.seller
+        try:
+            if hasattr(s, "fetch"):
+                doc = await s.fetch()
+                return str(doc.id)
+        except Exception:
+            pass
+        if isinstance(s, dict):
+            if "id" in s:
+                return str(s["id"])
+            if "$id" in s:
+                sid = s["$id"]
+                if isinstance(sid, dict) and "$oid" in sid:
+                    return str(sid["$oid"])
+                return str(sid)
+        if isinstance(s, str):
+            return s
+        return None
+
+    seller_id = await _extract_seller_id(product)
+    if str(seller_id) != str(current_user.id) and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if product.is_sold:
+        return product  # idempotent
+
+    await product.set({
+        "is_sold": True,
+        "stock_quantity": 0,
+        "updated_at": datetime.utcnow()
+    })
+    return product

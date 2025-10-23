@@ -78,6 +78,7 @@ class Message(Document):
     sender: Link["User"]
     receiver: Link["User"]
     content: str = Field(..., max_length=1000)
+    product: Optional[Link["Product"]] = None  # ← NEW: tie message to a listing
     created_at: datetime = Field(default_factory=datetime.utcnow)
     is_read: bool = Field(default=False)
 
