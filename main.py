@@ -5,12 +5,12 @@ from beanie import init_beanie
 import os
 from dotenv import load_dotenv
 
-from models import User, Product, Message
-from routers import users, products, auth, messages
-
 
 # Load environment variables
 load_dotenv()
+
+from models import User, Product, Message
+from routers import users, products, auth, messages, uploads
 
 # ✅ Create ONE FastAPI app instance
 app = FastAPI(title="Marketplace API")
@@ -53,4 +53,4 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(products.router)
 app.include_router(messages.router)
-
+app.include_router(uploads.router)
