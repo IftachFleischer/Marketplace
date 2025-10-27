@@ -93,7 +93,7 @@ async def create_product(
         category=product_data.category,
         brand=product_data.brand,
         images=images,
-        # Keep current storage style; _extract_seller_id handles it
+        size=product_data.size,
         seller={"id": current_user.id, "collection": "users"},
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -139,6 +139,7 @@ async def update_product(
         "images",
         "stock_quantity",
         "is_sold",
+        "size",
     }
     safe_update = {k: v for k, v in update_data.items() if k in ALLOWED_FIELDS}
     safe_update["updated_at"] = datetime.utcnow()

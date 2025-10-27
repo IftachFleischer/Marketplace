@@ -14,6 +14,7 @@ class User(Document):
     email: EmailStr
     password_hash: str
     phone_number: Optional[str] = Field(None, pattern=r"^\+?[0-9]{7,15}$")
+    city: Optional[str] = None
     address: Optional[str] = Field(None, max_length=100)
     role: str = Field(default="user")
     is_active: bool = Field(default=True)
@@ -27,6 +28,7 @@ class Product(Document):
     product_description: str = Field(..., max_length=1000)
     price_usd: int
     seller: Link["User"]  # Forward reference
+    size: Optional[str] = Field(default=None, max_length=16)
     category: Optional[str] = Field(None, max_length=50)        # e.g., "Electronics"
     brand: Optional[str] = Field(None, max_length=50)           # e.g., "Apple"
     images: Optional[List[str]] = Field(default_factory=list)   # URLs to product images
@@ -49,6 +51,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: constr(min_length=6, max_length=128)
     phone_number: Optional[str] = None
+    city: Optional[str] = None
     address: Optional[str] = None
 
 
@@ -59,6 +62,7 @@ class ProductCreate(BaseModel):
     category: Optional[str] = None
     brand: Optional[str] = None
     images: Optional[list[str]] = []
+    size: Optional[str] = Field(default=None, max_length=16)
 
 class UserResponse(BaseModel):
     id: str

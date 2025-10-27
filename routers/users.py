@@ -71,3 +71,23 @@ async def get_user_products(user_id: str):
 
     products = await Product.find(Product.seller.id == user_oid).to_list()
     return products
+
+# Public profile: safe, minimal fields
+@router.get("/{user_id}/public")
+async def get_public_user(user_id: str):
+    try:
+        oid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    user = await User.get(oid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Return only non-sensitive fields
+    return {
+        "id": str(user.id),
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "city": user.city or "",
+    }

@@ -110,6 +110,7 @@ async def register_user(user: UserCreate):
         email=user.email,
         password_hash=hashed_pw,
         phone_number=user.phone_number,
+        city=user.city,
         address=user.address,
     )
     await new_user.insert()
