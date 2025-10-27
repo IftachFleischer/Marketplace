@@ -1,5 +1,5 @@
 from beanie import Document, Link
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, constr
 from typing import Optional, List
 from datetime import datetime
 
@@ -44,10 +44,10 @@ class Product(Document):
 # -----------------------
 
 class UserCreate(BaseModel):
-    first_name: str
-    last_name: str
+    first_name: constr(strip_whitespace=True, min_length=1)
+    last_name: constr(strip_whitespace=True, min_length=1)
     email: EmailStr
-    password: str
+    password: constr(min_length=6, max_length=128)
     phone_number: Optional[str] = None
     address: Optional[str] = None
 
